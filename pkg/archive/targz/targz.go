@@ -6,7 +6,10 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"io"
+	"log"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // Archive as tar.gz
@@ -34,27 +37,34 @@ func New(target io.Writer) Archive {
 }
 
 // Add file to the archive
-func (a Archive) Add(name, path string) error {
-	file, err := os.Open(path) // #nosec
-	if err != nil {
+func (a Archive) Add(name, src string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		header, err := tar.FileInfoHeader(info, path)
+		if err != nil {
+			return err
+		}
+		filename := strings.Replace(path, src, name, 1)
+		log.Println(path, filename, info.IsDir())
+		if filename == "." && !info.IsDir() {
+			for i := len(path) - 1; i >= 0; i-- {
+				if path[i] == '/' {
+					filename = path[i:]
+					break
+				}
+			}
+		}
+		header.Name = filename
+		if err := a.tw.WriteHeader(header); err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(a.tw, f)
 		return err
-	}
-	defer file.Close() // nolint: errcheck
-	info, err := file.Stat()
-	if err != nil {
-		return err
-	}
-	header, err := tar.FileInfoHeader(info, name)
-	if err != nil {
-		return err
-	}
-	header.Name = name
-	if err = a.tw.WriteHeader(header); err != nil {
-		return err
-	}
-	if info.IsDir() {
-		return nil
-	}
-	_, err = io.Copy(a.tw, file)
-	return err
+	})
 }

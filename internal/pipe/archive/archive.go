@@ -11,9 +11,6 @@ import (
 	"sync"
 
 	"github.com/apex/log"
-	"github.com/campoy/unique"
-	"github.com/mattn/go-zglob"
-
 	"github.com/goreleaser/goreleaser/internal/artifact"
 	"github.com/goreleaser/goreleaser/internal/ids"
 	"github.com/goreleaser/goreleaser/internal/semerrgroup"
@@ -141,12 +138,12 @@ func create(ctx *context.Context, archive config.Archive, binaries []*artifact.A
 	var a = NewEnhancedArchive(archivelib.New(archiveFile), wrap)
 	defer a.Close() // nolint: errcheck
 
-	files, err := findFiles(archive)
+	files, mirrors, err := findFiles(archive)
 	if err != nil {
 		return fmt.Errorf("failed to find files to archive: %s", err.Error())
 	}
-	for _, f := range files {
-		if err = a.Add(f, f); err != nil {
+	for i, f := range files {
+		if err = a.Add(mirrors[i], f); err != nil {
 			return fmt.Errorf("failed to add %s to the archive: %s", f, err.Error())
 		}
 	}
@@ -210,18 +207,21 @@ func skip(ctx *context.Context, archive config.Archive, binaries []*artifact.Art
 	return nil
 }
 
-func findFiles(archive config.Archive) (result []string, err error) {
+func findFiles(archive config.Archive) (result, mirror []string, err error) {
 	for _, glob := range archive.Files {
-		files, err := zglob.Glob(glob)
-		if err != nil {
-			return result, fmt.Errorf("globbing failed for pattern %s: %s", glob, err.Error())
+		var replacePrefix = glob
+		if strings.Contains(glob, ":") {
+			f := strings.SplitN(glob, ":", 2)
+			glob = f[0]
+			replacePrefix = f[1]
 		}
-		result = append(result, files...)
+		result = append(result, glob)
+		mirror = append(mirror, replacePrefix)
 	}
 	// remove duplicates
-	unique.Slice(&result, func(i, j int) bool {
-		return strings.Compare(result[i], result[j]) < 0
-	})
+	// unique.Slice(&result, func(i, j int) bool {
+	// 	return strings.Compare(result[i], result[j]) < 0
+	// })
 	return
 }
 
@@ -257,10 +257,10 @@ type EnhancedArchive struct {
 func (d EnhancedArchive) Add(name, path string) error {
 	name = strings.Replace(filepath.Join(d.wrap, name), "\\", "/", -1)
 	log.Debugf("adding file: %s as %s", path, name)
-	if _, ok := d.files[name]; ok {
-		return fmt.Errorf("file %s already exists in the archive", name)
-	}
-	d.files[name] = path
+	// if _, ok := d.files[name]; ok {
+	// 	return fmt.Errorf("file %s already exists in the archive", name)
+	// }
+	// d.files[name] = path
 	return d.a.Add(name, path)
 }
 
