@@ -6,7 +6,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,7 +43,6 @@ func (a Archive) Add(name, src string) error {
 			return err
 		}
 		filename := strings.Replace(path, src, name, 1)
-		log.Println(path, filename, info.IsDir())
 		if filename == "." && !info.IsDir() {
 			for i := len(path) - 1; i >= 0; i-- {
 				if path[i] == '/' {
